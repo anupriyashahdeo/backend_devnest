@@ -1,19 +1,23 @@
 const express = require("express");
 const router = express.Router();
-const bcrypt = require("bcrypt"); //* bcrypt is a 3rd party library which we use to hash, salt and compare passwords
+const bcrypt = require("bcrypt"); //* bcrypt is a 3rd party library which we use to hash, salt and compare password
+const User = require("../models/userModel")
 const {
     validateName,
     validateEmail,
     validatePassword,
 } = require("../utils/validators");
+const createDB = require("../config/db");
 
-let users = {}; //* This will be our database
+createDB.sync().then(() =>
+    console.log("db is ready")
+)
 
 router.post("/signup", async (req, res) => {
     try {
         const { name, email, password } = req.body; //* destructuring name, email and password out of the request body
 
-        const userExists = users.hasOwnProperty(email);
+        const userExists = await User.findOne({ where: { email: email } })
 
         if (userExists) {
             return res.status(403).send("User already exists"); //* check if the user with the entered email already exists in the database
@@ -41,15 +45,16 @@ router.post("/signup", async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10); //* hashes the password with a salt, generated with the specified number of rounds
 
-        users[email] = {
-            name: name,
-            password: hashedPassword,
-        }; //* Saving user to the database
+        const user = { email, name, password: hashedPassword };
+
+        const createdUser = await User.create(user)
+
+        console.log(createdUser)
 
         return res
             .status(201)
             .send(
-                `Welcome to Devsnest ${users[email].name}. Thank you for signing up`
+                `Welcome to Devsnest ${createdUser.name}. Thank you for signing up`
             );
     } catch (err) {
         console.log(err);
@@ -68,7 +73,7 @@ router.post("/signin", async (req, res) => {
             return res.status(400).send("Error: Please enter your password");
         }
 
-        const userExists = users.hasOwnProperty(email); //* check if the user with the entered email exists in the database
+        const userExists = await User.findOne({ where: { email: email } }); //* check if the user with the entered email exists in the database
 
         if (!userExists) {
             return res.status(404).send("Error: User not found");
@@ -77,7 +82,7 @@ router.post("/signin", async (req, res) => {
         //* hashes the entered password and then compares it to the hashed password stored in the database
         const passwordMatched = await bcrypt.compare(
             password,
-            users[email].password
+            userExists.password
         );
 
         if (!passwordMatched) {
@@ -86,7 +91,7 @@ router.post("/signin", async (req, res) => {
 
         return res
             .status(200)
-            .send(`Welcome to Devsnest ${existingUser.name}. You are logged in`);
+            .send(`Welcome to Devsnest ${userExists.name}. You are logged in`);
     } catch (err) {
         console.log(err);
         return res.status(500).send(`Error: ${err.message}`);
